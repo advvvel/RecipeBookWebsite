@@ -30,12 +30,13 @@
             border-radius: 20px; font-size: 14px; outline: none; 
         }
 
-        /* Sidebar - SCROLLING ENABLED */
+        /* Sidebar - FIXED BOTTOM SPACING */
         .sidebar { 
             position: fixed; top: 0; right: -320px; width: 300px; height: 100%; 
             background: #222; color: white; padding: 25px; transition: 0.4s ease; 
             z-index: 1001; display: flex; flex-direction: column; box-sizing: border-box;
             overflow-y: auto; 
+            padding-bottom: 60px; /* Added gap at the bottom */
         }
         .sidebar.active { right: 0; }
         .sidebar-overlay { 
@@ -63,11 +64,11 @@
         }
 
         .btn-logout {
-            margin-top: auto; width: 100%; padding: 12px; background: #d32f2f;
+            margin-top: 20px; width: 100%; padding: 12px; background: #d32f2f;
             color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
         }
 
-        /* Folder Item Styling */
+        /* Folder Item Styling in Sidebar */
         .folder-item {
             display: flex; justify-content: space-between; align-items: center;
             padding: 10px; margin-bottom: 5px; background: #333; border-radius: 5px;
@@ -86,7 +87,7 @@
         .main-content { padding: 30px; }
         #recipeList { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 30px; }
         
-        /* Card Design */
+        /* Recipe Card Design */
         .card { 
             border-radius: 15px; overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.12); 
             padding: 0; cursor: pointer; transition: transform 0.2s; background: white;
@@ -96,6 +97,17 @@
         .card-img { width: 100%; height: 200px; object-fit: cover; background: #eee; }
         .card-body { padding: 25px; }
         
+        /* Folder Card Design (New) */
+        .folder-card {
+            background: #fff; border-top: 15px solid #ffca28; /* Folder tab look */
+            position: relative; border-radius: 10px; min-height: 150px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: 0.2s;
+        }
+        .folder-card:hover { transform: scale(1.02); }
+        .folder-card h3 { color: #333; margin: 0; font-size: 20px; }
+        .folder-icon { font-size: 40px; margin-bottom: 10px; display: block; text-align: center; }
+
         .recipe-header { border-bottom: 2px solid rgba(0,0,0,0.1); padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .recipe-header h3 { margin: 0; color: #111; font-size: 22px; text-transform: capitalize; }
         .card-folder-tag { font-size: 10px; background: rgba(0,0,0,0.05); padding: 4px 8px; border-radius: 10px; color: #666; text-transform: uppercase; font-weight: bold; }
@@ -131,8 +143,10 @@
             <button onclick="window.addFolder()" style="cursor:pointer; background:#555; border:none; color:white; padding:0 12px; border-radius:5px;">+</button>
         </div>
         
-        <button class="btn-logout" onclick="window.handleLogout()">Sign Out</button>
-        <button onclick="window.toggleSidebar()" style="margin-top:10px; width:100%; padding:10px; background:#555; color:white; border:none; border-radius:8px; cursor:pointer;">Close</button>
+        <div style="margin-top: auto;">
+            <button class="btn-logout" onclick="window.handleLogout()">Sign Out</button>
+            <button onclick="window.toggleSidebar()" style="margin-top:10px; width:100%; padding:10px; background:#555; color:white; border:none; border-radius:8px; cursor:pointer;">Close</button>
+        </div>
     </div>
 
     <div class="navbar">
@@ -147,7 +161,10 @@
     </div>
 
     <div class="main-content">
-        <h2 id="currentFolderTitle">All Recipes</h2>
+        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+            <button id="backBtn" onclick="window.filterFolder('All')" style="display:none; padding: 5px 15px; cursor: pointer;">← Back</button>
+            <h2 id="currentFolderTitle" style="margin:0;">All Recipes</h2>
+        </div>
         <div id="recipeList">Loading...</div>
     </div>
 
@@ -285,6 +302,7 @@
                 localStorage.setItem('myFolders', JSON.stringify(window.folders));
                 document.getElementById('newFolderName').value = "";
                 window.renderFolderUI();
+                window.displayRecipes(); // Refresh dash to show new folder card
             }
         };
 
@@ -293,13 +311,19 @@
                 window.folders.splice(index, 1);
                 localStorage.setItem('myFolders', JSON.stringify(window.folders));
                 window.renderFolderUI();
+                window.displayRecipes();
             }
         };
 
         window.filterFolder = (name) => {
             window.currentFolder = name;
             document.getElementById('currentFolderTitle').innerText = name;
-            window.toggleSidebar();
+            document.getElementById('backBtn').style.display = (name === 'All') ? 'none' : 'block';
+            
+            // Close sidebar if it's open
+            if(document.getElementById('sidebar').classList.contains('active')) {
+                window.toggleSidebar();
+            }
             window.displayRecipes();
         };
 
@@ -341,6 +365,18 @@
             const term = document.getElementById('searchInput').value.toLowerCase();
             list.innerHTML = "";
 
+            // 1. Show Folder Cards ONLY if we are in "All" view and NOT searching
+            if(window.currentFolder === 'All' && term === "") {
+                window.folders.forEach(f => {
+                    const fCard = document.createElement('div');
+                    fCard.className = 'card folder-card';
+                    fCard.onclick = () => window.filterFolder(f);
+                    fCard.innerHTML = `<div><span class="folder-icon">📁</span><h3>${f} Folder</h3></div>`;
+                    list.appendChild(fCard);
+                });
+            }
+
+            // 2. Show Recipe Cards
             const filtered = window.cloudRecipes.filter(r => {
                 const matchesFolder = window.currentFolder === 'All' || r.folder === window.currentFolder;
                 const matchesSearch = r.name.toLowerCase().includes(term);
