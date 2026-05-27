@@ -36,11 +36,12 @@
             border-radius: 20px; font-size: 14px; outline: none; 
         }
 
-        /* Sidebar */
+        /* Sidebar - ADDED SCROLLING HERE */
         .sidebar { 
             position: fixed; top: 0; right: -320px; width: 300px; height: 100%; 
             background: #222; color: white; padding: 25px; transition: 0.4s ease; 
             z-index: 1001; display: flex; flex-direction: column; box-sizing: border-box;
+            overflow-y: auto; 
         }
         .sidebar.active { right: 0; }
         .sidebar-overlay { 
@@ -84,7 +85,7 @@
         .main-content { padding: 30px; }
         #recipeList { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 30px; }
         
-        /* Updated Neat Card Design with "Tabs" */
+        /* Neat Card Design */
         .card { 
             border-radius: 15px; overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.12); 
             padding: 0; cursor: pointer; transition: transform 0.2s; background: white;
@@ -94,7 +95,6 @@
         .card-img { width: 100%; height: 200px; object-fit: cover; background: #eee; }
         .card-body { padding: 25px; }
         
-        /* Card Sections */
         .recipe-header { border-bottom: 2px solid rgba(0,0,0,0.1); padding-bottom: 10px; margin-bottom: 15px; }
         .recipe-header h3 { margin: 0; color: #111; font-size: 22px; text-transform: capitalize; }
         
@@ -154,7 +154,13 @@
             <h2 id="modalTitle">Recipe Info</h2>
             <input type="hidden" id="editDocId">
             <label>Recipe Name</label><input type="text" id="recipeName">
-            <label>Image URL</label><input type="text" id="recipeImage" placeholder="Paste image link here...">
+            
+            <label>Recipe Image</label>
+            <input type="file" id="recipeFile" accept="image/*">
+            <div id="previewContainer" style="margin-top:10px; display:none;">
+                <img id="imgPreview" src="" style="width:100px; height:100px; object-fit:cover; border-radius:8px;">
+            </div>
+
             <label>Folder</label><select id="recipeFolderSelect"></select>
             <label>Ingredients</label><textarea id="recipeIngredients" rows="3" placeholder="List ingredients here..."></textarea>
             <label>Instructions</label><textarea id="recipeSteps" rows="4" placeholder="How to make it..."></textarea>
@@ -192,6 +198,7 @@
 
         let currentUser = null;
         let cloudRecipes = [];
+        let selectedImageData = ""; // To store the file data
 
         window.folders = JSON.parse(localStorage.getItem('myFolders')) || [];
         window.dashColors = JSON.parse(localStorage.getItem('dashColors')) || ['#f4f7f6', '#ffecec', '#e3f2fd', '#222222'];
@@ -206,6 +213,20 @@
                 syncCloudRecipes(user.uid);
             } else {
                 window.location.href = 'index.html';
+            }
+        });
+
+        // File Selection Logic
+        document.getElementById('recipeFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    selectedImageData = event.target.result;
+                    document.getElementById('imgPreview').src = selectedImageData;
+                    document.getElementById('previewContainer').style.display = "block";
+                };
+                reader.readAsDataURL(file);
             }
         });
 
@@ -303,105 +324,3 @@
 
         function syncCloudRecipes(uid) {
             const q = query(collection(db, "recipes"), where("uid", "==", uid));
-            onSnapshot(q, (snapshot) => {
-                cloudRecipes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                window.displayRecipes();
-            });
-        }
-
-        window.saveRecipeToCloud = async () => {
-            const docId = document.getElementById('editDocId').value;
-            const data = {
-                uid: currentUser.uid,
-                name: document.getElementById('recipeName').value,
-                image: document.getElementById('recipeImage').value,
-                folder: document.getElementById('recipeFolderSelect').value,
-                ingredients: document.getElementById('recipeIngredients').value,
-                steps: document.getElementById('recipeSteps').value,
-                cardBg: window.selectedCardColor
-            };
-            if (docId) await updateDoc(doc(db, "recipes", docId), data);
-            else await addDoc(collection(db, "recipes"), data);
-            window.closeModal();
-        };
-
-        window.deleteRecipe = async () => {
-            const docId = document.getElementById('editDocId').value;
-            if(docId && confirm("Are you sure you want to delete this recipe?")) {
-                await deleteDoc(doc(db, "recipes", docId));
-                window.closeModal();
-            }
-        };
-
-        window.displayRecipes = () => {
-            const list = document.getElementById('recipeList');
-            const searchVal = document.getElementById('searchInput').value.toLowerCase();
-            list.innerHTML = "";
-            let filtered = window.currentFolder === 'All' ? cloudRecipes : cloudRecipes.filter(r => r.folder === window.currentFolder);
-            if(searchVal) filtered = filtered.filter(r => r.name.toLowerCase().includes(searchVal));
-            
-            filtered.forEach(r => {
-                const imgTag = r.image ? `<img src="${r.image}" class="card-img" onerror="this.src='https://via.placeholder.com/350x180?text=No+Image'">` : '';
-                
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.style.background = r.cardBg;
-                card.onclick = () => window.openEditModal(r);
-                card.innerHTML = `
-                    ${imgTag}
-                    <div class="card-body">
-                        <div class="recipe-header">
-                            <h3>${r.name}</h3>
-                        </div>
-                        
-                        <div class="recipe-section">
-                            <span class="section-label">Ingredients</span>
-                            <div class="section-content">${r.ingredients}</div>
-                        </div>
-                        
-                        <div class="recipe-section">
-                            <span class="section-label">Instructions</span>
-                            <div class="section-content">${r.steps}</div>
-                        </div>
-                        
-                        <small style="color:#888; display:block; text-align:right; font-style:italic;">Edit</small>
-                    </div>
-                `;
-                list.appendChild(card);
-            });
-        };
-
-        window.openModal = () => {
-            document.getElementById('recipeModal').style.display = "block";
-            document.getElementById('modalTitle').innerText = "Create Recipe";
-            document.getElementById('editDocId').value = "";
-            document.getElementById('recipeName').value = "";
-            document.getElementById('recipeImage').value = "";
-            document.getElementById('recipeIngredients').value = "";
-            document.getElementById('recipeSteps').value = "";
-            document.getElementById('deleteRecipeBtn').style.display = "none";
-            window.selectedCardColor = '#ffffff'; 
-            window.renderCardSwatches();
-        };
-
-        window.openEditModal = (recipe) => {
-            document.getElementById('recipeModal').style.display = "block";
-            document.getElementById('modalTitle').innerText = "Edit Recipe";
-            document.getElementById('editDocId').value = recipe.id;
-            document.getElementById('recipeName').value = recipe.name;
-            document.getElementById('recipeImage').value = recipe.image || "";
-            document.getElementById('recipeFolderSelect').value = recipe.folder;
-            document.getElementById('recipeIngredients').value = recipe.ingredients;
-            document.getElementById('recipeSteps').value = recipe.steps;
-            document.getElementById('deleteRecipeBtn').style.display = "block";
-            window.selectedCardColor = recipe.cardBg || '#ffffff';
-            window.renderCardSwatches();
-        };
-        
-        window.closeModal = () => document.getElementById('recipeModal').style.display = "none";
-
-        window.renderDashSwatches();
-        window.renderFolderUI();
-    </script>
-</body>
-</html>
